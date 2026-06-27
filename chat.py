@@ -54,7 +54,9 @@ def build_base_cmd(model):
         "claude",
         "-p",
         "--output-format",
-        "json",
+        "stream-json",  # emit one JSON event per line so we can stream tokens
+        "--include-partial-messages",
+        "--verbose",  # required by the CLI alongside stream-json in print mode
         "--tools",
         "",  # disable ALL built-in tools: no file/bash/network access
         "--system-prompt",
@@ -65,35 +67,60 @@ def build_base_cmd(model):
     return cmd
 
 
-def ask(base_cmd, session_id, prompt, first_turn, cwd):
-    """Run one turn against the claude CLI and return the reply text.
+def ask(base_cmd, session_id, prompt, first_turn, cwd, out=None):
+    """Run one turn, streaming reply text to `out` as it arrives.
 
-    Raises RuntimeError with a human-readable message on any failure.
+    Returns True if any text was printed. Raises RuntimeError with a
+    human-readable message on failure.
     """
+    if out is None:
+        out = sys.stdout
     cmd = list(base_cmd)
     cmd += ["--session-id", session_id] if first_turn else ["--resume", session_id]
     cmd.append(prompt)  # user input is a single argv element — never shell-parsed
 
     try:
-        proc = subprocess.run(cmd, cwd=cwd, capture_output=True, text=True)
+        proc = subprocess.Popen(
+            cmd, cwd=cwd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
+        )
     except FileNotFoundError:
         raise RuntimeError("the 'claude' CLI was not found on your PATH.")
 
+    printed_any = False
+    reported_error = None
+    for line in proc.stdout:
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            data = json.loads(line)
+        except (json.JSONDecodeError, ValueError):
+            continue
+        kind = data.get("type")
+        if kind == "stream_event":
+            event = data.get("event", {})
+            if event.get("type") == "content_block_delta":
+                delta = event.get("delta", {})
+                if delta.get("type") == "text_delta":
+                    text = delta.get("text", "")
+                    if text:
+                        out.write(text)
+                        out.flush()
+                        printed_any = True
+        elif kind == "result" and data.get("is_error"):
+            reported_error = str(
+                data.get("result") or data.get("api_error_status") or "claude reported an error."
+            )
+
+    proc.wait()
+    stderr = (proc.stderr.read() or "").strip() if proc.stderr else ""
+
     if proc.returncode != 0:
-        detail = (proc.stderr or proc.stdout or "").strip()
-        raise RuntimeError(detail or f"claude exited with code {proc.returncode}.")
+        raise RuntimeError(stderr or reported_error or f"claude exited with code {proc.returncode}.")
+    if reported_error:
+        raise RuntimeError(reported_error)
 
-    try:
-        data = json.loads(proc.stdout)
-    except (json.JSONDecodeError, ValueError):
-        raise RuntimeError((proc.stdout or proc.stderr or "no output").strip())
-
-    if data.get("is_error"):
-        raise RuntimeError(
-            str(data.get("result") or data.get("api_error_status") or "claude reported an error.")
-        )
-
-    return data.get("result", "")
+    return printed_any
 
 
 def repl(args):
@@ -120,18 +147,15 @@ def repl(args):
         if prompt.lower() in EXIT_WORDS:
             break
 
-        sys.stdout.write("…thinking\r")
-        sys.stdout.flush()
         try:
-            reply = ask(base_cmd, session_id, prompt, first_turn, cwd)
+            printed = ask(base_cmd, session_id, prompt, first_turn, cwd)
             first_turn = False  # only advance on success, so resume stays valid
         except RuntimeError as err:
-            sys.stdout.write(" " * 12 + "\r")  # clear the thinking line
             print(f"[error] {err}\n", file=sys.stderr)
             continue
 
-        sys.stdout.write(" " * 12 + "\r")  # clear the thinking line
-        print(f"{reply}\n")
+        # terminate the streamed reply with a blank line before the next prompt
+        print("\n" if printed else "(no response)\n")
 
     print("bye.")
 

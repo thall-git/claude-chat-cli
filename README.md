@@ -52,8 +52,11 @@ Leave with `exit`, `quit`, Ctrl-D, or Ctrl-C.
 
 - One UUID is generated per session. Turn 1 uses `claude -p --session-id <uuid>`;
   later turns use `--resume <uuid>`, which is what preserves conversation memory.
-- Every call adds `--system-prompt "<conversational persona>"`, `--tools ""`
-  (no tools), and `--output-format json` (the reply is read from `.result`).
+- Every call adds `--system-prompt "<conversational persona>"` and `--tools ""`
+  (no tools).
+- Replies **stream live**: the call uses
+  `--output-format stream-json --include-partial-messages`, and each text delta
+  is printed token-by-token as it arrives.
 - Conversation memory lasts only for the life of one REPL session — nothing is
   resumed across launches.
 
@@ -74,7 +77,6 @@ Leave with `exit`, `quit`, Ctrl-D, or Ctrl-C.
 ## Limitations (by design)
 
 - Interactive REPL only (no one-shot/pipe mode).
-- No streaming output — each turn shows a `…thinking` indicator, then the reply.
 - No cross-session persistence.
 
 ## License

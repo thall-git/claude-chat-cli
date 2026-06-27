@@ -15,8 +15,6 @@ and the coding/agent system prompt is replaced with a conversational persona.
 
 - No cross-launch persistence — conversation memory lasts only for the life of a
   single REPL session.
-- No streaming token output — each turn is a single request with a "thinking"
-  indicator. Chat replies are short enough that this is fine.
 - No third-party dependencies — Python standard library only.
 - No agent tools (file/bash/web access). This is chat, not Claude Code.
 
@@ -46,8 +44,10 @@ Every subprocess call includes:
   default agent/coding system prompt.
 - `--tools ""` — disables all built-in tools, so there is no file/bash access
   and no permission prompts.
-- `--output-format json` — returns a JSON object; the script parses `.result`
-  for the reply text. (`.session_id` and `.is_error` are also available.)
+- `--output-format stream-json --include-partial-messages --verbose` — emits one
+  JSON event per line so replies can be streamed. The script reads
+  `stream_event` → `content_block_delta` → `delta.text` (type `text_delta`) and
+  prints each chunk live; the terminal `result` event carries `is_error`.
 
 The subprocess is run from a neutral working directory (e.g. the user's home or
 a temp dir) so no project `CLAUDE.md` is auto-discovered into the context.
@@ -94,9 +94,8 @@ chat.py [--model <alias>]
 
 - **First, refuse to run as root** (see Security), then parse args.
 - Prompt the user with a simple marker (e.g. `you> `).
-- While waiting on the subprocess, print a `…thinking` indicator, cleared once
-  the reply arrives.
-- Print Claude's reply, then loop.
+- Stream Claude's reply token-by-token as it arrives, then a blank line, then
+  loop.
 - Exit cleanly on `exit`, `quit`, Ctrl-D (EOF), or Ctrl-C.
 - Blank / whitespace-only input is ignored (no API call).
 
@@ -116,8 +115,8 @@ The REPL must survive a failed turn rather than crashing:
 |------|----------------|
 | startup guard | refuse to run as root (`os.geteuid`) before anything else |
 | arg parsing | read optional `--model`; build base CLI args |
-| `ask(prompt, first_turn)` | run the subprocess for one turn, return reply text or raise a clear error |
-| REPL loop | read input, manage first-vs-resume, render thinking indicator, handle exit/errors |
+| `ask(...)` | run the subprocess for one turn, stream reply text to stdout, raise a clear error on failure |
+| REPL loop | read input, manage first-vs-resume, handle exit/errors |
 
 `ask()` is the single integration point with the `claude` CLI and can be tested
 in isolation by stubbing the subprocess call.
