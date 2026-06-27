@@ -41,8 +41,9 @@ def parse_args(argv=None):
     )
     parser.add_argument(
         "--model",
+        default="opus",
         help="Model alias to pass through to claude (e.g. opus, sonnet, haiku). "
-        "Defaults to your normal model.",
+        "Defaults to opus.",
     )
     return parser.parse_args(argv)
 

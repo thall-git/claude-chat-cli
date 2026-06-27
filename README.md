@@ -10,9 +10,14 @@ is replaced, so it answers like a chat, not a coding agent.
 
 ## Requirements
 
-- Python 3 (standard library only — no dependencies)
-- The [`claude`](https://docs.claude.com/en/docs/claude-code) CLI installed, on
-  your `PATH`, and already logged in (`claude` once interactively if needed)
+- **A Claude subscription** (Pro/Max or a Claude account with Claude Code
+  access). This tool uses that subscription for auth — it does **not** use an
+  API key.
+- **Claude Code installed and configured.** The
+  [`claude`](https://docs.claude.com/en/docs/claude-code) CLI must be installed,
+  on your `PATH`, and already signed in (run `claude` once interactively to log
+  in if you haven't).
+- Python 3 (standard library only — no dependencies).
 
 ## Usage
 
@@ -35,10 +40,10 @@ you> exit
 bye.
 ```
 
-Pick a model for the session:
+Defaults to **opus**. Pick a different model for the session:
 
 ```bash
-python3 chat.py --model opus     # or sonnet, haiku
+python3 chat.py --model sonnet   # or haiku, opus
 ```
 
 Leave with `exit`, `quit`, Ctrl-D, or Ctrl-C.
@@ -71,3 +76,7 @@ Leave with `exit`, `quit`, Ctrl-D, or Ctrl-C.
 - Interactive REPL only (no one-shot/pipe mode).
 - No streaming output — each turn shows a `…thinking` indicator, then the reply.
 - No cross-session persistence.
+
+## License
+
+[MIT](LICENSE) — open source. Do whatever you like.
